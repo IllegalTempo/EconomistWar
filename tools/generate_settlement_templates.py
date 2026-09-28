@@ -46,9 +46,10 @@ def list_tag(name: str, element_type: int, values: list[bytes]) -> bytes:
 
 
 def state(name: str, properties: dict[str, str] | None = None) -> bytes:
-    children = [string_tag("Name", name)]
+    # Minecraft 26.3 structure palettes use lowercase `id` and `properties`.
+    children = [string_tag("id", name)]
     if properties:
-        children.append(compound_tag("Properties", [string_tag(key, value) for key, value in properties.items()]))
+        children.append(compound_tag("properties", [string_tag(key, value) for key, value in properties.items()]))
     return compound_payload(children)
 
 
@@ -131,7 +132,7 @@ def create_start() -> None:
             (connector_x, 0, connector_z),
             "minecraft:jigsaw",
             {"orientation": "north_up"},
-            jigsaw("economistwars:street", "economistwars:house", "economistwars:settlement/homes"),
+            jigsaw("economistwars:house", "economistwars:house", "economistwars:settlement/homes"),
         )
     template.write("start", (size, 6, size))
 
@@ -173,7 +174,7 @@ def create_home() -> None:
     template = Template()
     add_home(template, 0, 0)
     template.add((4, 0, 8), "minecraft:jigsaw", {"orientation": "south_up"},
-                 jigsaw("economistwars:house", "minecraft:empty", "minecraft:empty"))
+                 jigsaw("economistwars:house", "economistwars:house", "minecraft:empty"))
     template.write("home", (9, 6, 9))
 
 
