@@ -1,0 +1,15 @@
+{
+  "entity.economistwars.citizen": "Citizen",
+  "citizen.economistwars.sex.female": "Female",
+  "citizen.economistwars.sex.male": "Male",
+  "commands.economistwars.household.created": "Created a household of %1$s citizens (ID %2$s).",
+  "commands.economistwars.household.failed": "Could not create the household; the operation was rolled back.",
+  "screen.economistwars.citizen.title": "Citizen Profile",
+  "screen.economistwars.citizen.name": "Name",
+  "screen.economistwars.citizen.sex": "Sex",
+  "screen.economistwars.citizen.id": "Citizen ID",
+  "screen.economistwars.citizen.skin": "Skin",
+  "screen.economistwars.citizen.household": "Household ID",
+  "screen.economistwars.citizen.household_size": "Household size",
+  "screen.economistwars.citizen.unassigned": "Unassigned"
+}

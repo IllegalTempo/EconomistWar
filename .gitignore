@@ -1,0 +1,5 @@
+.gradle/
+.tools/
+.superpowers/
+build/
+run/
