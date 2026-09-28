@@ -4,6 +4,7 @@ import com.economistwars.EconomistWars;
 import com.economistwars.citizen.CitizenEntity;
 import com.economistwars.citizen.CitizenEntityType;
 import com.economistwars.household.HouseholdSavedData;
+import com.economistwars.household.LandSavedData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import java.util.ArrayList;
@@ -27,10 +28,21 @@ public final class CitizenCommands {
 
     private static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("ew")
-                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                .then(Commands.literal("land").executes(context -> inspectLand(context.getSource())))
                 .then(Commands.literal("household")
+                        .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
                         .then(Commands.argument("count", IntegerArgumentType.integer(1, 16))
                                 .executes(context -> createHousehold(context.getSource(), IntegerArgumentType.getInteger(context, "count"))))));
+    }
+
+    private static int inspectLand(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        LandSavedData.get(player.level()).parcelAt(player.level(), player.blockPosition())
+                .ifPresentOrElse(parcel -> source.sendSuccess(() -> parcel.owner() == null
+                        ? Component.translatable("commands.economistwars.land.unowned")
+                        : Component.translatable("commands.economistwars.land.owned", parcel.owner().toString()), false),
+                        () -> source.sendFailure(Component.translatable("commands.economistwars.land.none")));
+        return 1;
     }
 
     private static int createHousehold(CommandSourceStack source, int count) throws com.mojang.brigadier.exceptions.CommandSyntaxException {

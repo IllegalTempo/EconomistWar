@@ -12,7 +12,17 @@ public record CitizenProfilePayload(
         String citizenId,
         String skinId,
         String householdId,
-        int householdSize
+        int householdSize,
+        int householdFood,
+        int foodShortage,
+        int householdCoins,
+        int ownedParcels,
+        int farmingLevel,
+        int miningLevel,
+        int buildingLevel,
+        int farmingExperience,
+        int miningExperience,
+        int buildingExperience
 ) implements CustomPacketPayload {
     public static final Type<CitizenProfilePayload> TYPE = new Type<>(
             Identifier.fromNamespaceAndPath(EconomistWars.MOD_ID, "citizen_profile")
@@ -26,6 +36,16 @@ public record CitizenProfilePayload(
                 buffer.writeUtf(payload.skinId());
                 buffer.writeUtf(payload.householdId());
                 buffer.writeVarInt(payload.householdSize());
+                buffer.writeVarInt(payload.householdFood());
+                buffer.writeVarInt(payload.foodShortage());
+                buffer.writeVarInt(payload.householdCoins());
+                buffer.writeVarInt(payload.ownedParcels());
+                buffer.writeVarInt(payload.farmingLevel());
+                buffer.writeVarInt(payload.miningLevel());
+                buffer.writeVarInt(payload.buildingLevel());
+                buffer.writeVarInt(payload.farmingExperience());
+                buffer.writeVarInt(payload.miningExperience());
+                buffer.writeVarInt(payload.buildingExperience());
             },
             buffer -> new CitizenProfilePayload(
                     buffer.readUtf(),
@@ -33,6 +53,16 @@ public record CitizenProfilePayload(
                     buffer.readUtf(),
                     buffer.readUtf(),
                     buffer.readUtf(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
+                    buffer.readVarInt(),
                     buffer.readVarInt()
             )
     );

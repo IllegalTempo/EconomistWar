@@ -114,13 +114,14 @@ def create_start() -> None:
     template = Template()
     # Jigsaw connectors sit on the settlement's ground layer (relative Y=0),
     # like the connectors in vanilla village meeting-point templates.
-    size = 35
-    for x in range(size):
+    width = 35
+    depth = 60
+    for x in range(width):
         for y in range(1, 6):
-            for z in range(size):
+            for z in range(depth):
                 template.add((x, y, z), "minecraft:air")
-    for x in range(size):
-        for z in range(size):
+    for x in range(width):
+        for z in range(depth):
             material = "minecraft:coarse_dirt" if x == 17 or z == 17 else "minecraft:grass_block"
             template.add((x, 0, z), material)
     template.add((17, 1, 17), "minecraft:oak_planks")
@@ -134,7 +135,25 @@ def create_start() -> None:
             {"orientation": "north_up"},
             jigsaw("economistwars:house", "economistwars:house", "economistwars:settlement/homes"),
         )
-    template.write("start", (size, 6, size))
+    # Six 7x7 deeds form one large settlement farm. Three are granted to
+    # founding households and three are available for later purchases.
+    for farm_x in (6, 14, 22):
+        for farm_z in (41, 49):
+            center_x, center_z = farm_x + 3, farm_z + 3
+            for x in range(farm_x, farm_x + 7):
+                for z in range(farm_z, farm_z + 7):
+                    if x == center_x and z == center_z:
+                        template.add((x, 0, z), "minecraft:water", {"level": "0"})
+                    else:
+                        template.add((x, 0, z), "minecraft:farmland", {"moisture": "7"})
+                        template.add((x, 1, z), "minecraft:wheat", {"age": "7" if z == farm_z else "0"})
+            template.add((center_x, 1, center_z), "economistwars:farm_plot", nbt=[
+                string_tag("id", "economistwars:farm_plot"),
+                int_tag("x", center_x),
+                int_tag("y", 1),
+                int_tag("z", center_z),
+            ])
+    template.write("start", (width, 6, depth))
 
 
 def add_home(template: Template, origin_x: int, origin_z: int) -> None:
@@ -168,6 +187,12 @@ def add_home(template: Template, origin_x: int, origin_z: int) -> None:
         int_tag("z", origin_z + 4),
     ]
     template.add((origin_x + 4, 1, origin_z + 4), "economistwars:household_home", nbt=anchor_nbt)
+    template.add((origin_x + 3, 1, origin_z + 4), "economistwars:household_storage", nbt=[
+        string_tag("id", "economistwars:household_storage"),
+        int_tag("x", origin_x + 3),
+        int_tag("y", 1),
+        int_tag("z", origin_z + 4),
+    ])
 
 
 def create_home() -> None:

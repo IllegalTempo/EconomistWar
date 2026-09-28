@@ -22,6 +22,11 @@ public final class CitizenHouseholdSpawner {
         try {
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.FEMALE, homePosition, -0.4);
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.MALE, homePosition, 0.4);
+            HouseholdFarmSavedData.get(level).registerHome(level, householdId, homePosition);
+            if (!HouseholdFarmSavedData.get(level).ensureStorage(level, householdId)) {
+                throw new IllegalStateException("Could not create household storage");
+            }
+            LandSavedData.get(level).grantStarter(level, householdId, homePosition);
             return true;
         } catch (RuntimeException exception) {
             for (CitizenEntity citizen : citizens) {
@@ -29,6 +34,8 @@ public final class CitizenHouseholdSpawner {
                 householdData.removeCitizen(citizen.citizenId());
             }
             householdData.removeHousehold(householdId);
+            HouseholdFarmSavedData.get(level).removeHousehold(level, householdId);
+            LandSavedData.get(level).releaseHousehold(householdId);
             EconomistWars.LOGGER.error(
                     "Could not populate household home at {} in {}",
                     homePosition,
