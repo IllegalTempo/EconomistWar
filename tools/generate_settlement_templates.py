@@ -1,4 +1,4 @@
-"""Generate the two compact structure templates used by the settlement jigsaw."""
+"""Generate the settlement start and home structure templates."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "src/main/resources/data/economistwars/structure/settlement"
+OUTPUT = ROOT / "src/main/resources/data/economistwars/structure"
 DATA_VERSION = 5023  # Minecraft 26.3, read from its bundled village templates.
 
 
@@ -92,9 +92,10 @@ class Template:
             self.block_indexes[pos] = len(self.blocks)
             self.blocks.append(encoded)
 
-    def write(self, name: str, size: tuple[int, int, int]) -> None:
-        OUTPUT.mkdir(parents=True, exist_ok=True)
-        path = OUTPUT / f"{name}.nbt"
+    def write(self, name: str, size: tuple[int, int, int], directory: str = "settlement") -> None:
+        output = OUTPUT / directory
+        output.mkdir(parents=True, exist_ok=True)
+        path = output / f"{name}.nbt"
         path.write_bytes(gzip.compress(structure(size, self.palette, self.blocks), mtime=0))
         print(f"Wrote {path.relative_to(ROOT)} ({len(self.blocks)} blocks)")
 
@@ -125,6 +126,12 @@ def create_start() -> None:
             material = "minecraft:coarse_dirt" if x == 17 or z == 17 else "minecraft:grass_block"
             template.add((x, 0, z), material)
     template.add((17, 1, 17), "minecraft:oak_planks")
+    template.add((17, 1, 17), "economistwars:settlement_market", nbt=[
+        string_tag("id", "economistwars:settlement_market"),
+        int_tag("x", 17),
+        int_tag("y", 1),
+        int_tag("z", 17),
+    ])
     template.add((17, 2, 17), "minecraft:cobblestone")
     template.add((17, 3, 17), "minecraft:lantern", {"hanging": "false", "waterlogged": "false"})
 
@@ -193,6 +200,13 @@ def add_home(template: Template, origin_x: int, origin_z: int) -> None:
         int_tag("y", 1),
         int_tag("z", origin_z + 4),
     ])
+
+    # Two beds let both members of a founding household sleep at home.
+    for bed_x in (2, 6):
+        template.add((origin_x + bed_x, 1, origin_z + 3), "minecraft:red_bed",
+                     {"facing": "north", "occupied": "false", "part": "foot"})
+        template.add((origin_x + bed_x, 1, origin_z + 2), "minecraft:red_bed",
+                     {"facing": "north", "occupied": "false", "part": "head"})
 
 
 def create_home() -> None:

@@ -3,6 +3,7 @@ package com.economistwars.household;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -16,12 +17,12 @@ import net.minecraft.world.level.storage.ValueOutput;
 public final class HouseholdStorageBlockEntity extends BlockEntity {
     private static final int SLOTS = 9;
     private UUID owner;
-    private final List<ItemStack> wheat = new ArrayList<>(SLOTS);
+    private final List<ItemStack> items = new ArrayList<>(SLOTS);
 
     public HouseholdStorageBlockEntity(BlockPos position, BlockState state) {
         super(HouseholdStorageBlock.BLOCK_ENTITY_TYPE, position, state);
         for (int slot = 0; slot < SLOTS; slot++) {
-            wheat.add(ItemStack.EMPTY);
+            items.add(ItemStack.EMPTY);
         }
     }
 
@@ -39,18 +40,19 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
     }
 
     public ItemStack insert(UUID householdId, ItemStack offered) {
-        if (!belongsTo(householdId) || !offered.is(Items.WHEAT) || offered.isEmpty()) {
+        if (!belongsTo(householdId) || offered.isEmpty()) {
             return offered.copy();
         }
         ItemStack remainder = offered.copy();
         for (int slot = 0; slot < SLOTS && !remainder.isEmpty(); slot++) {
-            ItemStack stored = wheat.get(slot);
+            ItemStack stored = items.get(slot);
+            int stackLimit = Math.min(64, remainder.getMaxStackSize());
             if (stored.isEmpty()) {
-                int count = Math.min(64, remainder.getCount());
-                wheat.set(slot, remainder.copyWithCount(count));
+                int count = Math.min(stackLimit, remainder.getCount());
+                items.set(slot, remainder.copyWithCount(count));
                 remainder.shrink(count);
-            } else if (ItemStack.isSameItemSameComponents(stored, remainder) && stored.getCount() < 64) {
-                int count = Math.min(64 - stored.getCount(), remainder.getCount());
+            } else if (ItemStack.isSameItemSameComponents(stored, remainder) && stored.getCount() < stackLimit) {
+                int count = Math.min(stackLimit - stored.getCount(), remainder.getCount());
                 stored.grow(count);
                 remainder.shrink(count);
             }
@@ -61,19 +63,70 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
         return remainder;
     }
 
+    public List<ItemStack> contents(UUID householdId) {
+        if (!belongsTo(householdId)) return List.of();
+        return items.stream().map(ItemStack::copy).toList();
+    }
+
+    public ItemStack takeOne(UUID householdId, Predicate<ItemStack> matches) {
+        if (!belongsTo(householdId)) return ItemStack.EMPTY;
+        for (int slot = 0; slot < SLOTS; slot++) {
+            ItemStack stored = items.get(slot);
+            if (stored.isEmpty() || !matches.test(stored)) continue;
+            ItemStack taken = stored.copyWithCount(1);
+            stored.shrink(1);
+            if (stored.isEmpty()) items.set(slot, ItemStack.EMPTY);
+            setChanged();
+            return taken;
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** Swaps one item each way, restoring both inventories if either insertion fails. */
+    public boolean exchangeOne(UUID ownerId, HouseholdStorageBlockEntity other, UUID otherOwnerId,
+            Predicate<ItemStack> ownItem, Predicate<ItemStack> otherItem) {
+        if (other == null || other == this || !belongsTo(ownerId) || !other.belongsTo(otherOwnerId)) return false;
+        List<ItemStack> before = contents(ownerId);
+        List<ItemStack> otherBefore = other.contents(otherOwnerId);
+        ItemStack offered = takeOne(ownerId, ownItem);
+        ItemStack requested = other.takeOne(otherOwnerId, otherItem);
+        if (offered.isEmpty() || requested.isEmpty()) {
+            restore(ownerId, before);
+            other.restore(otherOwnerId, otherBefore);
+            return false;
+        }
+        if (!insert(ownerId, requested).isEmpty() || !other.insert(otherOwnerId, offered).isEmpty()) {
+            restore(ownerId, before);
+            other.restore(otherOwnerId, otherBefore);
+            return false;
+        }
+        return true;
+    }
+
+    private void restore(UUID householdId, List<ItemStack> snapshot) {
+        if (!belongsTo(householdId)) return;
+        for (int slot = 0; slot < SLOTS; slot++) {
+            items.set(slot, slot < snapshot.size() ? snapshot.get(slot).copy() : ItemStack.EMPTY);
+        }
+        setChanged();
+    }
+
     public int takeWheat(UUID householdId, int requested) {
         if (!belongsTo(householdId) || requested <= 0) {
             return 0;
         }
         int taken = 0;
         for (int slot = 0; slot < SLOTS && taken < requested; slot++) {
-            ItemStack stored = wheat.get(slot);
+            ItemStack stored = items.get(slot);
+            if (!stored.is(Items.WHEAT)) {
+                continue;
+            }
             int count = Math.min(requested - taken, stored.getCount());
             if (count > 0) {
                 stored.shrink(count);
                 taken += count;
                 if (stored.isEmpty()) {
-                    wheat.set(slot, ItemStack.EMPTY);
+                    items.set(slot, ItemStack.EMPTY);
                 }
             }
         }
@@ -87,11 +140,15 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
         if (!belongsTo(householdId)) {
             return 0;
         }
-        return wheat.stream().mapToInt(ItemStack::getCount).sum();
+        return items.stream().filter(stack -> stack.is(Items.WHEAT)).mapToInt(ItemStack::getCount).sum();
     }
 
     public int freeWheatCapacity(UUID householdId) {
-        return belongsTo(householdId) ? SLOTS * 64 - wheatCount(householdId) : 0;
+        if (!belongsTo(householdId)) {
+            return 0;
+        }
+        return items.stream().mapToInt(stack -> stack.isEmpty() || stack.is(Items.WHEAT)
+                ? 64 - stack.getCount() : 0).sum();
     }
 
     public void abandon(UUID householdId) {
@@ -100,7 +157,7 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
         }
         owner = null;
         for (int slot = 0; slot < SLOTS; slot++) {
-            wheat.set(slot, ItemStack.EMPTY);
+            items.set(slot, ItemStack.EMPTY);
         }
         setChanged();
     }
@@ -110,18 +167,18 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
     }
 
     public boolean isEmpty() {
-        return wheat.stream().allMatch(ItemStack::isEmpty);
+        return items.stream().allMatch(ItemStack::isEmpty);
     }
 
     public ItemStack getItem(int slot) {
-        return slot >= 0 && slot < SLOTS ? wheat.get(slot) : ItemStack.EMPTY;
+        return slot >= 0 && slot < SLOTS ? items.get(slot) : ItemStack.EMPTY;
     }
 
     public ItemStack removeItem(int slot, int amount) {
         if (slot < 0 || slot >= SLOTS || amount <= 0) {
             return ItemStack.EMPTY;
         }
-        ItemStack removed = net.minecraft.world.ContainerHelper.removeItem(wheat, slot, amount);
+        ItemStack removed = net.minecraft.world.ContainerHelper.removeItem(items, slot, amount);
         if (!removed.isEmpty()) {
             setChanged();
         }
@@ -132,7 +189,7 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
         if (slot < 0 || slot >= SLOTS) {
             return ItemStack.EMPTY;
         }
-        ItemStack removed = wheat.set(slot, ItemStack.EMPTY);
+        ItemStack removed = items.set(slot, ItemStack.EMPTY);
         setChanged();
         return removed;
     }
@@ -141,7 +198,7 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
         if (slot < 0 || slot >= SLOTS) {
             return;
         }
-        wheat.set(slot, stack.is(Items.WHEAT) ? stack.copyWithCount(Math.min(64, stack.getCount())) : ItemStack.EMPTY);
+        items.set(slot, stack.isEmpty() ? ItemStack.EMPTY : stack.copyWithCount(Math.min(Math.min(64, stack.getMaxStackSize()), stack.getCount())));
         setChanged();
     }
 
@@ -150,11 +207,11 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
     }
 
     public boolean canPlaceItem(int slot, ItemStack stack) {
-        return stack.is(Items.WHEAT);
+        return true;
     }
 
     public void clearContent() {
-        wheat.replaceAll(ignored -> ItemStack.EMPTY);
+        items.replaceAll(ignored -> ItemStack.EMPTY);
         setChanged();
     }
 
@@ -169,8 +226,12 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
             }
         }).orElse(null);
         for (int slot = 0; slot < SLOTS; slot++) {
-            ItemStack stack = input.read("Wheat" + slot, ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
-            wheat.set(slot, stack.is(Items.WHEAT) ? stack : ItemStack.EMPTY);
+            java.util.Optional<ItemStack> saved = input.read("Item" + slot, ItemStack.OPTIONAL_CODEC);
+            if (saved.isEmpty()) {
+                saved = input.read("Wheat" + slot, ItemStack.OPTIONAL_CODEC);
+            }
+            ItemStack stack = saved.orElse(ItemStack.EMPTY);
+            items.set(slot, stack);
         }
     }
 
@@ -181,8 +242,8 @@ public final class HouseholdStorageBlockEntity extends BlockEntity {
             output.putString("Owner", owner.toString());
         }
         for (int slot = 0; slot < SLOTS; slot++) {
-            if (!wheat.get(slot).isEmpty()) {
-                output.store("Wheat" + slot, ItemStack.OPTIONAL_CODEC, wheat.get(slot));
+            if (!items.get(slot).isEmpty()) {
+                output.store("Item" + slot, ItemStack.OPTIONAL_CODEC, items.get(slot));
             }
         }
     }

@@ -1,0 +1,8 @@
+{
+  "default": 1,
+  "items": {
+    "minecraft:coal": 1,
+    "minecraft:raw_iron": 2,
+    "minecraft:raw_gold": 100
+  }
+}

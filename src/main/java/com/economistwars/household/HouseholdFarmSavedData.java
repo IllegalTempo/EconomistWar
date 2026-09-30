@@ -88,7 +88,7 @@ public final class HouseholdFarmSavedData extends SavedData {
             }
             found = storage;
         }
-        if (found.wheatCount(householdId) == 0 && farm.food > 0) {
+        if (found.isEmpty() && farm.food > 0) {
             if (farm.food > found.freeWheatCapacity(householdId)) {
                 return false;
             }
@@ -100,16 +100,16 @@ public final class HouseholdFarmSavedData extends SavedData {
         return true;
     }
 
-    public ItemStack deposit(ServerLevel level, UUID householdId, ItemStack wheat) {
+    public ItemStack deposit(ServerLevel level, UUID householdId, ItemStack offered) {
         if (!ensureStorage(level, householdId)) {
-            return wheat.copy();
+            return offered.copy();
         }
         Farm farm = farms.get(householdId);
         HouseholdStorageBlockEntity storage = storage(level, farm, householdId);
         if (storage == null) {
-            return wheat.copy();
+            return offered.copy();
         }
-        ItemStack remainder = storage.insert(householdId, wheat);
+        ItemStack remainder = storage.insert(householdId, offered);
         farm.food = storage.wheatCount(householdId);
         setDirty();
         return remainder;

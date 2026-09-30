@@ -4,7 +4,8 @@ package com.economistwars.citizen;
 public enum CitizenSkill {
     FARMING("farming"),
     MINING("mining"),
-    BUILDING("building");
+    BUILDING("building"),
+    BAKERY("bakery");
 
     private final String serializedName;
 

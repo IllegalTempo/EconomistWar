@@ -9,9 +9,14 @@ public final class CitizenNetworking {
 
     public static void initialize() {
         PayloadTypeRegistry.clientboundPlay().register(CitizenProfilePayload.TYPE, CitizenProfilePayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(SettlementMarketPayload.TYPE, SettlementMarketPayload.CODEC);
     }
 
     public static void sendProfile(ServerPlayer player, CitizenProfilePayload payload) {
+        ServerPlayNetworking.send(player, payload);
+    }
+
+    public static void sendMarket(ServerPlayer player, SettlementMarketPayload payload) {
         ServerPlayNetworking.send(player, payload);
     }
 }

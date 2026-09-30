@@ -5,134 +5,156 @@ import com.economistwars.household.HouseholdSavedData;
 import com.economistwars.household.LandSavedData;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.component.SwingAnimation;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.state.BlockState;
 
-/** Harvests mature wheat only from crop blocks claimed by this citizen's household. */
-final class CitizenFarmGoal extends Goal {
-    private final CitizenEntity citizen;
+/** Produces food abstractly while working inside a farm plot owned by the household. */
+final class CitizenFarmGoal extends CitizenProductionGoal {
     private BlockPos target;
+    private BlockPos teleportPoint;
+    private BlockPos lastTeleportPoint;
     private UUID householdId;
     private int searchCooldown;
-    private int harvestTicks;
 
     CitizenFarmGoal(CitizenEntity citizen) {
-        this.citizen = citizen;
+        super(citizen);
         setFlags(EnumSet.of(Flag.MOVE));
     }
 
-    @Override
-    public boolean canUse() {
-        if (!(citizen.level() instanceof ServerLevel level) || citizen.level().isClientSide()) {
-            return false;
-        }
-        if (searchCooldown-- > 0 || !level.isBrightOutside() || !citizen.canCarryWheat(2)) {
+    @Override public CitizenDecisionPlanner.Action decisionAction() { return CitizenDecisionPlanner.Action.FARM; }
+    @Override protected List<CitizenDecisionPlanner.OutputOutcome> productionOutcomes() {
+        return List.of(new CitizenDecisionPlanner.OutputOutcome(Items.WHEAT, 2, 1.0, true));
+    }
+    @Override protected CitizenSkill productionSkill() { return CitizenSkill.FARMING; }
+    @Override protected int baseWorkTicks() { return 12; }
+    @Override protected int scoreTravelTicks() {
+        return teleportPoint == null ? 0 : CitizenDecisionPlanner.travelTicks(citizen.distanceToSqr(
+                teleportPoint.getX() + 0.5, teleportPoint.getY(), teleportPoint.getZ() + 0.5));
+    }
+    @Override protected int durationTravelTicks() {
+        if (teleportPoint == null) return 0;
+        double distance = citizen.distanceToSqr(teleportPoint.getX() + 0.5, teleportPoint.getY(), teleportPoint.getZ() + 0.5);
+        return distance <= 2.25 ? 0 : CitizenDecisionPlanner.travelTicks(distance);
+    }
+    @Override protected boolean scheduledWork() {
+        return citizen.level() instanceof ServerLevel level
+                && CitizenWorkSchedule.workFor(level) == CitizenWorkSchedule.Work.FARM;
+    }
+    @Override protected List<com.economistwars.network.CitizenProfilePayload.DecisionDetail> outcomeDetails(Evaluation evaluation) {
+        return List.of(new com.economistwars.network.CitizenProfilePayload.DecisionDetail(
+                "Expected output", "2 wheat; net utility " + String.format(java.util.Locale.ROOT, "%.4f", evaluation.outputUtility())));
+    }
+
+    @Override public boolean canUse() {
+        if (!(citizen.level() instanceof ServerLevel level) || citizen.isTeleporting()
+                || CitizenWorkSchedule.isNight(level) || !level.isBrightOutside()) return false;
+        if (searchCooldown > 0) {
+            searchCooldown = Math.max(0, searchCooldown - CitizenDecisionPlanner.RESCORE_TICKS);
             return false;
         }
         searchCooldown = 100 + citizen.getRandom().nextInt(40);
-        target = null;
-        householdId = citizen.householdId().orElse(null);
-        if (householdId == null || !HouseholdSavedData.get(level).hasMember(householdId, citizen.citizenId())) {
+        if (!citizen.canCarryWheat(2)) {
+            if (citizen.hasCarriedItems()) citizen.requestWorkProductDelivery();
             return false;
         }
-        double nearest = Double.MAX_VALUE;
-        ArrayList<BlockPos> ownedCrops = new ArrayList<>(HouseholdFarmSavedData.get(level).crops(level, householdId));
-        ownedCrops.addAll(LandSavedData.get(level).ownedCrops(level, householdId));
-        for (BlockPos crop : ownedCrops) {
-            if (!level.isLoaded(crop) || !isRipe(level, crop)) {
-                continue;
-            }
-            double distance = citizen.distanceToSqr(crop.getX() + 0.5, crop.getY() + 0.5, crop.getZ() + 0.5);
-            if (distance < nearest && distance < 96 * 96) {
-                target = crop;
-                nearest = distance;
-            }
-        }
-        return target != null;
+        householdId = citizen.householdId().orElse(null);
+        if (householdId == null || !HouseholdSavedData.get(level).hasMember(householdId, citizen.citizenId())) return false;
+        return selectOwnedPlot(level);
     }
 
-    @Override
-    public boolean canContinueToUse() {
+    @Override public boolean canContinueToUse() {
         return target != null && citizen.level() instanceof ServerLevel level
-                && level.isLoaded(target) && isRipe(level, target)
-                && citizen.canCarryWheat(2)
-                && ownsTarget(level)
-                && citizen.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5) < 96 * 96
-                && (citizen.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5) <= 5.0
-                    || !citizen.getNavigation().isDone());
+                && !CitizenWorkSchedule.isNight(level) && !citizen.workProductDeliveryRequested()
+                && level.isLoaded(target) && ownsTarget(level) && citizen.canCarryWheat(2)
+                && (citizen.isTeleporting() || teleportPoint != null || isInsidePlot(level));
     }
 
-    @Override
-    public void start() {
-        harvestTicks = 0;
+    @Override public void start() {
+        startProductionWork();
         citizen.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_HOE));
-        boolean far = citizen.distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5) > 16 * 16;
-        citizen.setSprinting(far);
-        citizen.getNavigation().moveTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5, far ? 1.25 : 0.85);
-    }
-
-    @Override
-    public void tick() {
-        if (target == null || !(citizen.level() instanceof ServerLevel level)) {
-            return;
-        }
-        double distance = citizen.distanceToSqr(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
-        if (distance > 5.0) {
-            if (distance <= 16 * 16 && citizen.isSprinting()) {
-                citizen.setSprinting(false);
-                citizen.getNavigation().setSpeedModifier(0.85);
-            }
-            return;
-        }
-        citizen.setSprinting(false);
-        harvestTicks++;
-        if (harvestTicks == 1 || harvestTicks == 6) {
-            citizen.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
-        }
-        level.destroyBlockProgress(citizen.getId(), target, Math.min(9, harvestTicks * 10 / 12));
-        if (harvestTicks >= 12 && isRipe(level, target) && ownsTarget(level)
-                && HouseholdSavedData.get(level).hasMember(householdId, citizen.citizenId())) {
-            BlockState matureCrop = level.getBlockState(target);
-            if (!level.setBlock(target, Blocks.WHEAT.defaultBlockState(), 3)) {
-                return;
-            }
-            level.destroyBlockProgress(citizen.getId(), target, -1);
-            level.levelEvent(citizen, 2001, target, Block.getId(matureCrop));
-            citizen.carryWheat(2);
-            citizen.addSkillExperience(CitizenSkill.FARMING, 5);
-            target = null;
+        if (teleportPoint != null && citizen.distanceToSqr(teleportPoint.getX() + 0.5,
+                teleportPoint.getY(), teleportPoint.getZ() + 0.5) > 2.25) {
+            citizen.beginTeleport((ServerLevel) citizen.level(), teleportPoint, "farm");
         }
     }
 
-    @Override
-    public void stop() {
-        if (target != null && citizen.level() instanceof ServerLevel level) {
-            level.destroyBlockProgress(citizen.getId(), target, -1);
+    @Override public void tick() {
+        if (!(citizen.level() instanceof ServerLevel level) || target == null) return;
+        if (!isInsidePlot(level)) {
+            if (!citizen.isTeleporting() && teleportPoint != null) citizen.beginTeleport(level, teleportPoint, "farm");
+            return;
         }
-        citizen.getNavigation().stop();
-        citizen.setSprinting(false);
+        if (!tickProductionWork(InteractionHand.MAIN_HAND)) return;
+        if (!ownsTarget(level) || CitizenWorkSchedule.isNight(level)
+                || !HouseholdSavedData.get(level).hasMember(householdId, citizen.citizenId())
+                || !citizen.canCarryWheat(2)) {
+            if (!citizen.canCarryWheat(2)) citizen.requestWorkProductDelivery();
+            return;
+        }
+        citizen.carryWheat(2);
+        citizen.setInventoryWork(CitizenWorkSchedule.Work.FARM);
+        citizen.addSkillExperience(CitizenSkill.FARMING, 5);
+        resetProductionWork();
+        citizen.restartDecisionProgress(estimatedDurationTicks());
+        if (!citizen.canCarryWheat(2)) citizen.requestWorkProductDelivery();
+    }
+
+    @Override public void stop() {
+        citizen.cancelTeleport();
+        if (!citizen.hasCarriedItems()) citizen.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        if (teleportPoint != null) lastTeleportPoint = teleportPoint;
         target = null;
+        teleportPoint = null;
         householdId = null;
-    }
-
-    private static boolean isRipe(ServerLevel level, BlockPos crop) {
-        return level.getBlockState(crop).is(Blocks.WHEAT)
-                && ((CropBlock) Blocks.WHEAT).isMaxAge(level.getBlockState(crop))
-                && level.getBlockState(crop.below()).is(Blocks.FARMLAND);
+        resetProductionWork();
     }
 
     private boolean ownsTarget(ServerLevel level) {
         return householdId != null && (HouseholdFarmSavedData.get(level).ownsCrop(level, householdId, target)
                 || LandSavedData.get(level).ownsCrop(level, householdId, target));
+    }
+
+    private boolean isInsidePlot(ServerLevel level) {
+        BlockPos citizenPos = citizen.blockPosition();
+        ArrayList<BlockPos> plotCells = new ArrayList<>(HouseholdFarmSavedData.get(level).crops(level, householdId));
+        plotCells.addAll(LandSavedData.get(level).ownedCrops(level, householdId));
+        for (BlockPos cell : plotCells) {
+            if (Math.abs(citizenPos.getX() - cell.getX()) <= 3
+                    && Math.abs(citizenPos.getZ() - cell.getZ()) <= 3
+                    && Math.abs(citizenPos.getY() - cell.getY()) <= 2) return true;
+        }
+        return false;
+    }
+
+    private boolean selectOwnedPlot(ServerLevel level) {
+        target = null;
+        teleportPoint = null;
+        if (householdId == null) return false;
+        ArrayList<BlockPos> plotCells = new ArrayList<>(HouseholdFarmSavedData.get(level).crops(level, householdId));
+        plotCells.addAll(LandSavedData.get(level).ownedCrops(level, householdId));
+        double nearest = Double.MAX_VALUE;
+        BlockPos nearestCell = null;
+        for (BlockPos cell : plotCells) {
+            double distance = citizen.distanceToSqr(cell.getX() + 0.5, cell.getY() + 0.5, cell.getZ() + 0.5);
+            if (distance >= nearest) continue;
+            nearestCell = cell;
+            nearest = distance;
+        }
+        if (nearestCell == null) return false;
+        BlockPos selectedCell = nearestCell;
+        level.getChunkAt(selectedCell);
+        BlockPos safePoint = CitizenTeleportPoints.randomSafePosition(level, citizen, selectedCell,
+                3, 0, 18, lastTeleportPoint, candidate ->
+                        Math.abs(candidate.getX() - selectedCell.getX()) <= 3
+                                && Math.abs(candidate.getZ() - selectedCell.getZ()) <= 3);
+        if (safePoint == null) return false;
+        target = selectedCell;
+        teleportPoint = safePoint;
+        return true;
     }
 }

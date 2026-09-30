@@ -19,7 +19,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** Invisible deed marker above a farm parcel's water source. */
+/** Visible, non-colliding deed marker above a farm parcel's water source. */
 public final class FarmPlotBlock extends Block implements EntityBlock {
     private static final ResourceKey<Block> KEY = ResourceKey.create(
             Registries.BLOCK, Identifier.fromNamespaceAndPath(EconomistWars.MOD_ID, "farm_plot")
@@ -44,7 +44,7 @@ public final class FarmPlotBlock extends Block implements EntityBlock {
 
     @Override
     protected RenderShape getRenderShape(BlockState state) {
-        return RenderShape.INVISIBLE;
+        return RenderShape.MODEL;
     }
 
     @Override
