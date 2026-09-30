@@ -23,7 +23,7 @@ public final class CitizenHouseholdSpawner {
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.FEMALE, homePosition, -0.4);
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.MALE, homePosition, 0.4);
             HouseholdFarmSavedData.get(level).registerHome(level, householdId, homePosition);
-            if (!HouseholdFarmSavedData.get(level).ensureStorage(level, householdId)) {
+            if (!HouseholdFarmSavedData.get(level). ensureStorage(level, householdId)) {
                 throw new IllegalStateException("Could not create household storage");
             }
             LandSavedData.get(level).grantStarter(level, householdId, homePosition);
