@@ -33,7 +33,6 @@ public class LandAssetsReference extends AssetsReference {
         );
     }
 
-    @Override
     public AssetsReference FromString(String serialized) {
         return new LandAssetsReference(parseBoundingBox(serialized));
     }

@@ -35,7 +35,7 @@ public class OwnershipSavedData extends SavedData {
         for (Map.Entry<UUID, HouseholdOwnerships> entry : ownerships.entrySet()) {
             List<String> serializedOwnerships = new ArrayList<>();
             for (Ownership ownership : entry.getValue().getAllOwnerships()) {
-                String serialized = serializeOwnership(ownership);
+                String serialized = ownership.serializeOwnership();
                 if (serialized != null) {
                     serializedOwnerships.add(serialized);
                 }

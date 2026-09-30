@@ -67,7 +67,7 @@ public class Ownership {
             UUID owner = UUID.fromString(fields[0]);
             return switch (fields[1]) {
                 case "item" -> new Ownership(owner, new ItemAssetsReference(UUID.fromString(fields[2])));
-                case "land" -> new Ownership(owner, new LandAssetsReference(parseBoundingBox(fields[2])));
+                case "land" -> new Ownership(owner, new LandAssetsReference(LandAssetsReference.parseBoundingBox(fields[2])));
                 default -> null;
             };
         } catch (IllegalArgumentException exception) {
