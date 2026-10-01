@@ -18,6 +18,16 @@ public class LandAssetsReference extends AssetsReference {
         return "land";
     }
 
+    @Override
+    public String serializePayload() {
+        BoundingBox bounds = LandBoundingBox;
+        if (bounds == null) {
+            return null;
+        }
+        return bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ","
+                + bounds.maxX() + "," + bounds.maxY() + "," + bounds.maxZ();
+    }
+
     public static BoundingBox parseBoundingBox(String serialized) {
         String[] coordinates = serialized.split(",", -1);
         if (coordinates.length != 6) {

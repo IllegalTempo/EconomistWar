@@ -1,9 +1,7 @@
 package com.economistwars.ownership;
 
 import com.economistwars.ownership.assetsReferences.AssetsReference;
-import com.economistwars.ownership.assetsReferences.ItemAssetsReference;
-import com.economistwars.ownership.assetsReferences.LandAssetsReference;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import com.economistwars.ownership.assetsReferences.AssetsReferenceRegistry;
 
 import java.util.UUID;
 
@@ -42,19 +40,8 @@ public class Ownership {
             return null;
         }
 
-        if (getAssetReference() instanceof ItemAssetsReference item) {
-            return item.getItemUUID() == null ? null : owner + "|item|" + item.getItemUUID();
-        }
-        if (getAssetReference() instanceof LandAssetsReference land) {
-            BoundingBox bounds = land.getLandBoundingBox();
-            if (bounds == null) {
-                return null;
-            }
-            return owner + "|land|"
-                    + bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ","
-                    + bounds.maxX() + "," + bounds.maxY() + "," + bounds.maxZ();
-        }
-        return null;
+        String payload = assetReference.serializePayload();
+        return payload == null ? null : owner + "|" + assetReference.getType() + "|" + payload;
     }
 
     public static Ownership deserializeOwnership(String serialized) {
@@ -65,11 +52,8 @@ public class Ownership {
 
         try {
             UUID owner = UUID.fromString(fields[0]);
-            return switch (fields[1]) {
-                case "item" -> new Ownership(owner, new ItemAssetsReference(UUID.fromString(fields[2])));
-                case "land" -> new Ownership(owner, new LandAssetsReference(LandAssetsReference.parseBoundingBox(fields[2])));
-                default -> null;
-            };
+            AssetsReference reference = AssetsReferenceRegistry.deserialize(fields[1], fields[2]);
+            return reference == null ? null : new Ownership(owner, reference);
         } catch (IllegalArgumentException exception) {
             return null;
         }

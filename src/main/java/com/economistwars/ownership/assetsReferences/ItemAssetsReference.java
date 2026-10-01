@@ -1,7 +1,5 @@
 package com.economistwars.ownership.assetsReferences;
 
-import net.minecraft.world.item.Item;
-
 import java.util.UUID;
 
 public class ItemAssetsReference extends AssetsReference{
@@ -19,6 +17,11 @@ public class ItemAssetsReference extends AssetsReference{
     @Override
     public String getType() {
         return "item";
+    }
+
+    @Override
+    public String serializePayload() {
+        return itemUUID == null ? null : itemUUID.toString();
     }
 
 }
