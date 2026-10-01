@@ -1,8 +1,12 @@
 package com.economistwars.household;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.UUID;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+import java.util.*;
 
 public final class Household {
     private final UUID id;
@@ -15,8 +19,9 @@ public final class Household {
     Household(UUID id, Set<UUID> members) {
         this.id = id;
         this.members = new LinkedHashSet<>(members);
+        this.householdStorage = new ArrayList<ItemStack>();
     }
-
+    public List<ItemStack> householdStorage;
     public UUID id() {
         return id;
     }
@@ -36,4 +41,57 @@ public final class Household {
     boolean isEmpty() {
         return members.isEmpty();
     }
+    public ItemStack requestFromStorage(Item item, int amount) {
+        for (ItemStack stack: householdStorage)
+        {
+            if(stack.getItem().equals(item))
+            {
+                int availableAmount = stack.getCount();
+                if(availableAmount >= amount)
+                {
+                    stack.setCount(availableAmount - amount);
+                    return new ItemStack(item, amount);
+                }
+                else
+                {
+                    stack.setCount(0);
+                    return new ItemStack(item, availableAmount);
+                }
+            }
+        }
+        return new ItemStack(Items.AIR, 0);
+    }
+    public ItemStack requestFromStorage(DataComponentType<?> dataComponentType, int amount) {
+        for (ItemStack stack: householdStorage)
+        {
+            if(stack.has(dataComponentType))
+            {
+                int availableAmount = stack.getCount();
+                if(availableAmount >= amount)
+                {
+                    stack.setCount(availableAmount - amount);
+                    return new ItemStack(stack.getItem(), amount);
+                }
+                else
+                {
+                    stack.setCount(0);
+                    return new ItemStack(stack.getItem(), availableAmount);
+                }
+            }
+        }
+        return new ItemStack(Items.AIR, 0);
+    }
+    public void AddToStorage(ItemStack item, int amount) {
+        for (ItemStack stack: householdStorage)
+        {
+            if(stack.getItem().equals(item.getItem()))
+            {
+                stack.setCount(stack.getCount() + amount);
+                return;
+            }
+        }
+        ItemStack newStack = new ItemStack(item.getItem(), amount);
+        householdStorage.add(newStack);
+    }
 }
+

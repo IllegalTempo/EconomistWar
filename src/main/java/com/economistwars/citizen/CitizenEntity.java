@@ -3,8 +3,6 @@ package com.economistwars.citizen;
 import com.economistwars.EconomistWars;
 import com.economistwars.household.Household;
 import com.economistwars.household.HouseholdSavedData;
-import com.economistwars.household.HouseholdFarmSavedData;
-import com.economistwars.household.LandSavedData;
 import com.economistwars.network.CitizenNetworking;
 import com.economistwars.network.CitizenProfilePayload;
 import java.util.ArrayList;
@@ -434,12 +432,12 @@ public final class CitizenEntity extends PathfinderMob {
             householdId().ifPresent(id -> {
                 Household household = HouseholdSavedData.get(serverLevel).getHousehold(id);
                 if (household != null && household.members().contains(citizenId())) {
-                    HouseholdFarmSavedData farms = HouseholdFarmSavedData.get(serverLevel);
-                    int shortage = farms.feedHousehold(serverLevel, id, household.members().size());
-                    if (shortage > 0) {
-                        applyShortageDamage(serverLevel, id, household, shortage);
-                    }
-                    LandSavedData.get(serverLevel).tickHousehold(serverLevel, id, household.members().size(), farms);
+                    ItemStack carried = household.requestFromStorage(Items.BREAD, 1);
+//                    int shortage = farms.feedHousehold(serverLevel, id, household.members().size());
+//                    if (shortage > 0) {
+//                        applyShortageDamage(serverLevel, id, household, shortage);
+//                    }
+//                    LandSavedData.get(serverLevel).tickHousehold(serverLevel, id, household.members().size(), farms);
                 }
             });
         }
