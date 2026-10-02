@@ -11,6 +11,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class OwnershipTest {
     private static final UUID OWNER = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
+    @org.junit.jupiter.api.BeforeAll
+    static void bootstrap() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.minecraft.server.Bootstrap.bootStrap();
+    }
+
     @Test
     void registeredAssetTypeRoundTripsWithoutOwnershipChanges() {
         AssetsReferenceRegistry.register("test-custom", CustomReference::new);
@@ -25,11 +31,14 @@ class OwnershipTest {
     }
 
     @Test
-    void existingItemAndLandRecordsKeepTheirFormat() {
-        String itemRecord = OWNER + "|item|" + OWNER;
+    void itemQuantitiesAndLandRecordsRoundTrip() {
+        String itemRecord = new Ownership(OWNER,
+                new ItemAssetsReference(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 12)))
+                .serializeOwnership();
         Ownership item = Ownership.deserializeOwnership(itemRecord);
         assertNotNull(item);
-        assertEquals(OWNER, ((ItemAssetsReference) item.getAssetReference()).getItemUUID());
+        assertEquals(net.minecraft.world.item.Items.WHEAT, ((ItemAssetsReference) item.getAssetReference()).item());
+        assertEquals(12, ((ItemAssetsReference) item.getAssetReference()).amount());
         assertEquals(itemRecord, item.serializeOwnership());
 
         String landRecord = OWNER + "|land|-1,2,3,4,5,6";
@@ -49,9 +58,9 @@ class OwnershipTest {
         assertNull(Ownership.deserializeOwnership(OWNER + "|item|bad"));
         assertNull(Ownership.deserializeOwnership(OWNER + "|land|1,2"));
         assertNull(Ownership.deserializeOwnership(OWNER + "|land|a,2,3,4,5,6"));
-        assertNull(new Ownership(new ItemAssetsReference(OWNER)).serializeOwnership());
+        assertNull(new Ownership(new ItemAssetsReference(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT))).serializeOwnership());
         assertNull(new Ownership(OWNER, null).serializeOwnership());
-        assertNull(new Ownership(OWNER, new ItemAssetsReference(null)).serializeOwnership());
+        assertThrows(IllegalArgumentException.class, () -> new ItemAssetsReference(net.minecraft.world.item.ItemStack.EMPTY));
         assertNull(new Ownership(OWNER, new LandAssetsReference(null)).serializeOwnership());
     }
 

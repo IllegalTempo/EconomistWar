@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +21,7 @@ public record CitizenMarketMemory(Item received, Item requested, BlockPos market
         marketPosition = marketPosition.immutable();
     }
 
-    public double gain(CitizenNeeds needs) {
+    public double gain(Map<String, CitizenNeed> needs) {
         return ItemNeedValues.forItem(received).utility(needs)
                 - ItemNeedValues.forItem(requested).utility(needs);
     }
@@ -41,7 +43,7 @@ public record CitizenMarketMemory(Item received, Item requested, BlockPos market
     }
 
     public static CitizenMarketMemory best(List<Offer> offers, List<Item> producible,
-            CitizenNeeds needs, BlockPos visitedMarket) {
+            Map<String, CitizenNeed> needs, BlockPos visitedMarket) {
         return offers.stream()
                 .filter(offer -> producible.contains(offer.requested()))
                 .map(offer -> new Candidate(offer.received(), offer.requested(),

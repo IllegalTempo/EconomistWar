@@ -31,6 +31,15 @@ public final class EconomistWars implements ModInitializer {
         SettlementMarketBlock.initialize();
         EconomistWarsCreativeTab.initialize();
         CitizenCommands.register();
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
+            // Import any legacy visuals before taking the citizen snapshot for this tick.
+            for (var level : server.getAllLevels()) for (var entity : level.getAllEntities())
+                if (entity instanceof com.economistwars.citizen.CitizenEntity citizen) citizen.importLegacy();
+            var context = com.economistwars.citizen.MinecraftCitizenSimulationContext.create(server);
+            var citizens = com.economistwars.citizen.CitizenSavedData.get(server.overworld());
+            com.economistwars.citizen.CitizenSimulation.advance(citizens.states(),context);
+            com.economistwars.citizen.CitizenPresentationManager.reconcile(server,citizens);
+        });
         LOGGER.info("Economist Wars is starting");
     }
 }

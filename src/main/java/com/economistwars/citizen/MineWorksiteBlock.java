@@ -42,6 +42,17 @@ public final class MineWorksiteBlock extends Block implements EntityBlock {
         EconomistWars.LOGGER.info("Registered public mine work site");
     }
 
+    @Override protected void onPlace(BlockState state,Level level,BlockPos pos,BlockState old,boolean moved) {
+        super.onPlace(state,level,pos,old,moved);
+        if (!old.is(this) && level instanceof ServerLevel server)
+            MineSiteSavedData.get(server).placed(new CitizenAssetKey(server.dimension().identifier().toString(),pos));
+    }
+    @Override protected void affectNeighborsAfterRemoval(BlockState state,ServerLevel level,BlockPos pos,boolean moved) {
+        super.affectNeighborsAfterRemoval(state,level,pos,moved);
+        if (!level.getBlockState(pos).is(this)) MineSiteSavedData.get(level)
+                .invalidate(new CitizenAssetKey(level.dimension().identifier().toString(),pos));
+    }
+
     @Override
     public BlockEntity newBlockEntity(BlockPos position, BlockState state) {
         return new MineWorksiteBlockEntity(position, state);

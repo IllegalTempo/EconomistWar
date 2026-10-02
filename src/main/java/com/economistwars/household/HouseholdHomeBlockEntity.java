@@ -13,6 +13,7 @@ public final class HouseholdHomeBlockEntity extends BlockEntity {
     }
 
     public void serverTick(ServerLevel level) {
+        if (level.getGameTime()%100 == 0) refreshBeds(level);
         HouseholdHomeSavedData savedData = HouseholdHomeSavedData.get(level);
         if (savedData.isPopulated(level.dimension(), worldPosition)) {
             return;
@@ -26,6 +27,26 @@ public final class HouseholdHomeBlockEntity extends BlockEntity {
 
         if (CitizenHouseholdSpawner.spawnCouple(level, worldPosition)) {
             savedData.markPopulated(level.dimension(), worldPosition);
+            refreshBeds(level);
         }
     }
+
+    private void refreshBeds(ServerLevel level) {
+        var beds = com.economistwars.citizen.HouseholdBedSavedData.get(level);
+        java.util.UUID ownerId = null;
+        for (var household : HouseholdSavedData.get(level).households())
+            if (household.home(level.dimension()).filter(worldPosition::equals).isPresent()) { ownerId = household.id(); break; }
+        if (ownerId == null) return;
+        for (BlockPos p : BlockPos.betweenClosed(worldPosition.offset(-5,-2,-5),worldPosition.offset(5,3,5))) {
+            if (!level.hasChunkAt(p)) continue;
+            var key = new com.economistwars.citizen.CitizenAssetKey(level.dimension().identifier().toString(),p.immutable());
+            var state = level.getBlockState(p);
+            if (state.getBlock() instanceof net.minecraft.world.level.block.BedBlock
+                    && state.getValue(net.minecraft.world.level.block.BedBlock.PART)
+                    == net.minecraft.world.level.block.state.properties.BedPart.FOOT) beds.register(ownerId,key);
+            else beds.invalidate(key);
+        }
+    }
+
 }
+

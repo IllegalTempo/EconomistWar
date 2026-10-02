@@ -28,6 +28,7 @@ public record CitizenProfilePayload(
         int eatNeed,
         int entertainmentNeed,
         int safetyNeed,
+        List<NeedProgress> needs,
         double workSpeedMultiplier,
         int estimatedWorkTicks,
         ItemStack marketMemoryReceived,
@@ -76,6 +77,11 @@ public record CitizenProfilePayload(
                 buffer.writeVarInt(payload.eatNeed());
                 buffer.writeVarInt(payload.entertainmentNeed());
                 buffer.writeVarInt(payload.safetyNeed());
+                buffer.writeVarInt(payload.needs().size());
+                for (NeedProgress need : payload.needs()) {
+                    buffer.writeUtf(need.name());
+                    buffer.writeVarInt(need.urgency());
+                }
                 buffer.writeDouble(payload.workSpeedMultiplier());
                 buffer.writeVarInt(payload.estimatedWorkTicks());
                 ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, payload.marketMemoryReceived());
@@ -112,6 +118,7 @@ public record CitizenProfilePayload(
                     buffer.readVarInt(),
                     buffer.readVarInt(),
                     buffer.readVarInt(),
+                    readNeeds(buffer),
                     buffer.readDouble(),
                     buffer.readVarInt(),
                     ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer),
@@ -141,6 +148,18 @@ public record CitizenProfilePayload(
         return skills;
     }
 
+    private static List<NeedProgress> readNeeds(RegistryFriendlyByteBuf buffer) {
+        int count = buffer.readVarInt();
+        if (count < 0 || count > buffer.readableBytes() / 2) {
+            throw new IllegalArgumentException("Invalid citizen need count: " + count);
+        }
+        List<NeedProgress> needs = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            needs.add(new NeedProgress(buffer.readUtf(), buffer.readVarInt()));
+        }
+        return needs;
+    }
+
     private static List<DecisionScore> readDecisionScores(RegistryFriendlyByteBuf buffer) {
         int count = Math.clamp(buffer.readVarInt(), 0, 32);
         List<DecisionScore> scores = new ArrayList<>(count);
@@ -160,6 +179,7 @@ public record CitizenProfilePayload(
     }
 
     public record SkillProgress(String name, int experience) {}
+    public record NeedProgress(String name, int urgency) {}
     public record DecisionScore(String action, boolean eligible, boolean selected, double score,
             List<DecisionDetail> details) {}
     public record DecisionDetail(String label, String value) {}

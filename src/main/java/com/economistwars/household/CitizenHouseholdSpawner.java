@@ -22,20 +22,20 @@ public final class CitizenHouseholdSpawner {
         try {
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.FEMALE, homePosition, -0.4);
             spawnCitizen(level, householdData, householdId, citizens, CitizenSex.MALE, homePosition, 0.4);
-            HouseholdFarmSavedData.get(level).registerHome(level, householdId, homePosition);
-            if (!HouseholdFarmSavedData.get(level). ensureStorage(level, householdId)) {
-                throw new IllegalStateException("Could not create household storage");
-            }
-            LandSavedData.get(level).grantStarter(level, householdId, homePosition);
+            householdData.registerHome(level, householdId, homePosition);
+            householdData.getHousehold(householdId).deposit(new net.minecraft.world.item.ItemStack(
+                    net.minecraft.world.item.Items.BREAD, 8));
+            householdData.setDirty();
             return true;
         } catch (RuntimeException exception) {
             for (CitizenEntity citizen : citizens) {
                 citizen.discard();
+                com.economistwars.citizen.CitizenSavedData.get(level).find(citizen.citizenId())
+                        .ifPresent(com.economistwars.citizen.CitizenSavedData.get(level)::rollbackCreation);
                 householdData.removeCitizen(citizen.citizenId());
             }
             householdData.removeHousehold(householdId);
-            HouseholdFarmSavedData.get(level).removeHousehold(level, householdId);
-            LandSavedData.get(level).releaseHousehold(householdId);
+            com.economistwars.ownership.OwnershipSavedData.get(level).releaseHousehold(householdId);
             EconomistWars.LOGGER.error(
                     "Could not populate household home at {} in {}",
                     homePosition,
@@ -65,6 +65,7 @@ public final class CitizenHouseholdSpawner {
 
         // The anchor is placed in the first air block above the home floor.
         citizen.setPos(homePosition.getX() + 0.5 + offsetX, homePosition.getY(), homePosition.getZ() + 0.5);
+        citizen.createBackendRecord();
         if (!level.addFreshEntity(citizen)) {
             throw new IllegalStateException("Minecraft rejected a citizen entity spawn");
         }

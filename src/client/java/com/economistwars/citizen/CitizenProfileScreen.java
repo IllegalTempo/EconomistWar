@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -244,9 +245,10 @@ public final class CitizenProfileScreen extends Screen {
                 new ProfileField(Component.translatable("screen.economistwars.citizen.decision_score"),
                         Component.literal(String.format(Locale.ROOT, "%.4f utility/tick%s", profile.decisionScore(),
                                 profile.decisionScore() >= 900.0 ? " (priority override)" : ""))),
-                new ProfileField(Component.translatable("screen.economistwars.citizen.needs"), Component.literal(String.format(
-                        Locale.ROOT, "Eat %d/100  •  Entertainment %d/100  •  Safety %d/100",
-                        profile.eatNeed(), profile.entertainmentNeed(), profile.safetyNeed()))),
+                new ProfileField(Component.translatable("screen.economistwars.citizen.needs"), Component.literal(
+                        profile.needs().stream()
+                                .map(need -> readableNeedName(need.name()) + " " + need.urgency() + "/100")
+                                .collect(Collectors.joining("  •  ")))),
                 new ProfileField(Component.translatable("screen.economistwars.citizen.id"), Component.literal(profile.citizenId())),
                 new ProfileField(Component.translatable("screen.economistwars.citizen.skin"), Component.literal(profile.skinId())),
                 new ProfileField(Component.translatable("screen.economistwars.citizen.household"), householdId),
@@ -321,6 +323,14 @@ public final class CitizenProfileScreen extends Screen {
                 Component.translatable("screen.economistwars.citizen.skill." + skill.name()),
                 Component.literal("Level " + level + "  •  " + experience + " XP"),
                 level >= 100 ? 100 : experience % 100);
+    }
+
+    private static String readableNeedName(String name) {
+        String[] words = name.replace('_', ' ').replace('-', ' ').trim().split("\\s+");
+        return java.util.Arrays.stream(words)
+                .filter(word -> !word.isEmpty())
+                .map(word -> word.substring(0, 1).toUpperCase(Locale.ROOT) + word.substring(1))
+                .collect(Collectors.joining(" "));
     }
 
     @Override

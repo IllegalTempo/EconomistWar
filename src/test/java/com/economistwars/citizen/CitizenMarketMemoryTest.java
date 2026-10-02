@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
@@ -17,7 +19,7 @@ class CitizenMarketMemoryTest {
 
     @Test
     void remembersHighestPositiveGainOfferForAProducibleItem() {
-        CitizenNeeds needs = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 0, 0, 0);
         var memory = CitizenMarketMemory.best(List.of(
                 new CitizenMarketMemory.Offer(Items.APPLE, Items.WHEAT),
                 new CitizenMarketMemory.Offer(Items.BREAD, Items.WHEAT)),
@@ -30,7 +32,7 @@ class CitizenMarketMemoryTest {
 
     @Test
     void noPositiveOrNonProducibleOfferClearsMemory() {
-        CitizenNeeds needs = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 0, 0, 0);
         assertNull(CitizenMarketMemory.best(List.of(
                 new CitizenMarketMemory.Offer(Items.WHEAT, Items.BREAD)),
                 List.of(Items.WHEAT), needs, BlockPos.ZERO));
@@ -42,8 +44,8 @@ class CitizenMarketMemoryTest {
     @Test
     void rememberedGainUsesCurrentNeeds() {
         CitizenMarketMemory memory = new CitizenMarketMemory(Items.APPLE, Items.WHEAT, BlockPos.ZERO);
-        assertEquals(2.0, memory.gain(new CitizenNeeds(100, 0, 0, 0)), 0.0001);
-        assertEquals(-2.0, memory.gain(new CitizenNeeds(0, 100, 100, 0)), 0.0001);
+        assertEquals(2.0, memory.gain(CitizenNeed.defaults(100, 0, 0, 0)), 0.0001);
+        assertEquals(-2.0, memory.gain(CitizenNeed.defaults(0, 100, 100, 0)), 0.0001);
     }
 
     @Test

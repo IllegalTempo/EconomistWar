@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.world.item.Item;
@@ -8,7 +10,7 @@ import net.minecraft.world.item.Item;
 public final class BarterTradeChoice {
     private BarterTradeChoice() {}
 
-    public static Optional<Choice> best(List<Item> tradeable, List<Item> requested, CitizenNeeds needs) {
+    public static Optional<Choice> best(List<Item> tradeable, List<Item> requested, Map<String, CitizenNeed> needs) {
         Choice best = null;
         for (Item traded : tradeable) {
             for (Item wanted : requested) {
@@ -23,7 +25,7 @@ public final class BarterTradeChoice {
     }
 
     /** Returns the largest positive need-utility gain from matching stored goods to published offers. */
-    public static double bestPotentialBenefit(List<Item> storedGoods, List<TradeOffer> offers, CitizenNeeds needs) {
+    public static double bestPotentialBenefit(List<Item> storedGoods, List<TradeOffer> offers, Map<String, CitizenNeed> needs) {
         double best = 0.0;
         for (TradeOffer offer : offers) {
             if (!storedGoods.contains(offer.requested())) continue;

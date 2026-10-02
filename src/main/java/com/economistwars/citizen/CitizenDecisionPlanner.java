@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.world.item.Item;
@@ -30,7 +32,7 @@ final class CitizenDecisionPlanner {
         return scheduled ? result * SCHEDULE_PREFERENCE : result;
     }
 
-    static double miningOutputUtility(CitizenNeeds needs, Item received, Item requested,
+    static double miningOutputUtility(Map<String, CitizenNeed> needs, Item received, Item requested,
             int availableStock, int coalCost, int ironCost, int goldCost) {
         return expectedOutputUtility(List.of(
                 new OutputOutcome(Items.COAL, 1, 0.7, availableStock >= coalCost),
@@ -40,7 +42,7 @@ final class CitizenDecisionPlanner {
     }
 
     static double expectedOutputUtility(List<OutputOutcome> outcomes, Item received,
-            Item requested, CitizenNeeds needs) {
+            Item requested, Map<String, CitizenNeed> needs) {
         double expected = 0.0;
         for (OutputOutcome outcome : outcomes) {
             if (outcome.affordable() && outcome.probability() > 0.0) {
@@ -51,9 +53,15 @@ final class CitizenDecisionPlanner {
         return expected;
     }
 
+<<<<<<< HEAD
     static double adjustedOutputUtility(Item product, int quantity,
             Item rememberedReceived, Item rememberedRequested,
             CitizenNeeds needs) {
+=======
+    static double adjustedOutputUtility(net.minecraft.world.item.Item product, int quantity,
+            net.minecraft.world.item.Item rememberedReceived, net.minecraft.world.item.Item rememberedRequested,
+            Map<String, CitizenNeed> needs) {
+>>>>>>> 6ed3b08ddfe4f62e2182c119ec4516b63a8bf14c
         if (quantity <= 0) return 0.0;
         double direct = ItemNeedValues.forItem(product).utility(needs);
         if (product == rememberedRequested && rememberedReceived != null) {

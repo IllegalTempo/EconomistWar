@@ -1,252 +1,85 @@
 package com.economistwars.household;
 
-import com.economistwars.citizen.BarterTradeChoice;
-import com.economistwars.citizen.CitizenEntity;
-import com.economistwars.citizen.CitizenMarketMemory;
-import com.economistwars.citizen.CitizenNeeds;
-import com.economistwars.citizen.ItemNeedValues;
-import com.economistwars.citizen.SettlementMarketSavedData;
+import com.economistwars.citizen.*;
 import com.economistwars.network.SettlementMarketPayload;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** A persistent one-for-one barter book for a generated settlement. */
+/** Loaded-world adapter for the authoritative backend barter book. */
 public final class SettlementMarketBlockEntity extends BlockEntity {
-    private final List<Offer> offers = new ArrayList<>();
-    private final List<SettlementMarketTradeRecord> history = new ArrayList<>();
-
-    public SettlementMarketBlockEntity(BlockPos position, BlockState state) {
-        super(SettlementMarketBlock.BLOCK_ENTITY_TYPE, position, state);
+    private SettlementMarketState legacy;
+    public SettlementMarketBlockEntity(BlockPos position,BlockState state) {
+        super(SettlementMarketBlock.BLOCK_ENTITY_TYPE,position,state);
     }
-
+    private SettlementMarketState state(ServerLevel level) {
+        CitizenAssetKey key = new CitizenAssetKey(level.dimension().identifier().toString(),worldPosition);
+        SettlementMarketState imported = legacy;
+        if (imported == null) imported = new SettlementMarketState(key);
+        // Legacy records have their dimension filled in after a Level has been assigned.
+        if (!imported.key.equals(key)) imported = SettlementMarketState.CODEC.parse(
+                net.minecraft.resources.RegistryOps.create(com.mojang.serialization.JsonOps.INSTANCE,level.registryAccess()),
+                withKey(level,imported,key)).getOrThrow();
+        SettlementMarketState result = SettlementMarketSavedData.get(level).registerIfAbsent(key,imported);
+        legacy = null;
+        return result;
+    }
+    private com.google.gson.JsonElement withKey(ServerLevel level,SettlementMarketState imported,CitizenAssetKey key) {
+        var ops = net.minecraft.resources.RegistryOps.create(com.mojang.serialization.JsonOps.INSTANCE,level.registryAccess());
+        var json = SettlementMarketState.CODEC.encodeStart(ops,imported).getOrThrow().getAsJsonObject();
+        json.add("key",CitizenAssetKey.CODEC.encodeStart(ops,key).getOrThrow()); return json;
+    }
     public void serverTick(ServerLevel level) {
-        if (level.getGameTime() % 100 == 0) SettlementMarketSavedData.get(level).register(level, worldPosition);
+        SettlementMarketSavedData.get(level).register(level,worldPosition); state(level);
     }
-
-    public boolean visit(ServerLevel level, UUID householdId, CitizenNeeds needs) {
-        return visit(level, householdId, needs, null);
+    public double potentialTradeBenefit(ServerLevel level,UUID household,Map<String,CitizenNeed> needs,List<net.minecraft.world.item.Item> ignored) {
+        return state(level).potentialTradeBenefit(household,needs,HouseholdSavedData.get(level)::getHousehold);
     }
-
-    public boolean visit(ServerLevel level, UUID householdId, CitizenNeeds needs, CitizenEntity citizen) {
-        if (citizen != null) citizen.refreshMarketMemory(null);
-        HouseholdFarmSavedData farms = HouseholdFarmSavedData.get(level);
-        if (!farms.ensureStorage(level, householdId)) return false;
-        HouseholdStorageBlockEntity buyer = storage(level, householdId);
-        if (buyer == null) return false;
-        List<ItemStack> buyerGoods = buyer.contents(householdId);
-        publishOffer(level, householdId, needs, buyerGoods);
-
-        if (citizen != null) {
-            List<CitizenMarketMemory.Offer> memories = validOffers(level, householdId).stream()
-                    .map(offer -> new CitizenMarketMemory.Offer(offer.offered.getItem(), offer.requested.getItem()))
-                    .toList();
-            citizen.refreshMarketMemory(CitizenMarketMemory.best(memories,
-                    CitizenMarketMemory.producibleItems(), needs, worldPosition));
-        }
-        CitizenMarketMemory remembered = citizen == null ? null : citizen.marketMemory();
-
-        OfferChoice best = null;
-        for (Offer offer : List.copyOf(offers)) {
-            if (offer.householdId.equals(householdId)) continue;
-            HouseholdStorageBlockEntity seller = storage(level, offer.householdId);
-            if (seller == null || !contains(seller.contents(offer.householdId), offer.offered)) {
-                offers.remove(offer);
-                setChanged();
-                continue;
-            }
-            if (offer.askScore >= 0) continue;
-            for (ItemStack buyerItem : buyerGoods) {
-                if (buyerItem.isEmpty() || buyerItem.getItem() != offer.requested.getItem()) continue;
-                double buyerScore = ItemNeedValues.forItem(buyerItem.getItem()).utility(needs)
-                        - ItemNeedValues.forItem(offer.offered.getItem()).utility(needs);
-                if (buyerScore >= 0) continue;
-                boolean rememberedChoice = remembered != null
-                        && offer.offered.getItem() == remembered.received()
-                        && offer.requested.getItem() == remembered.requested();
-                OfferChoice candidate = new OfferChoice(offer, buyerItem.copyWithCount(1), buyerScore, rememberedChoice);
-                if (best == null || candidate.compareTo(best) < 0) best = candidate;
-            }
-        }
-
-        if (best == null) return false;
-        OfferChoice selected = best;
-        HouseholdStorageBlockEntity seller = storage(level, selected.offer.householdId);
-        if (seller == null || !buyer.exchangeOne(householdId, seller, selected.offer.householdId,
-                stack -> stack.getItem() == selected.traded.getItem(),
-                stack -> ItemStack.isSameItemSameComponents(stack, selected.offer.offered))) return false;
-        history.add(new SettlementMarketTradeRecord(selected.offer.householdId, householdId,
-                selected.offer.offered, selected.traded, level.getGameTime()));
-        if (history.size() > 256) history.removeFirst();
-        offers.remove(selected.offer);
-        setChanged();
-        return true;
+    public double potentialTradeBenefit(ServerLevel level,UUID household,Map<String,CitizenNeed> needs) {
+        return potentialTradeBenefit(level,household,needs,List.of());
     }
-
-    /** Best positive utility gain the household could get by exchanging one stored item now. */
-    public double potentialTradeBenefit(ServerLevel level, UUID householdId, CitizenNeeds needs) {
-        HouseholdStorageBlockEntity buyer = storage(level, householdId);
-        List<Item> stored = buyer == null ? List.of()
-                : buyer.contents(householdId).stream().filter(stack -> !stack.isEmpty())
-                        .map(ItemStack::getItem).distinct().toList();
-        return potentialTradeBenefit(level, householdId, needs, stored);
+    public boolean visit(ServerLevel level,UUID household,Map<String,CitizenNeed> needs) {
+        return state(level).visit(household,needs,null,HouseholdSavedData.get(level)::getHousehold,level.getGameTime());
     }
-
-    public double potentialTradeBenefit(ServerLevel level, UUID householdId, CitizenNeeds needs, List<Item> producible) {
-        List<BarterTradeChoice.TradeOffer> availableOffers = validOffers(level, householdId).stream()
-                .map(offer -> new BarterTradeChoice.TradeOffer(offer.offered.getItem(), offer.requested.getItem()))
-                .toList();
-        return BarterTradeChoice.bestPotentialBenefit(producible, availableOffers, needs);
+    public boolean visit(ServerLevel level,UUID household,Map<String,CitizenNeed> needs,CitizenEntity citizen) {
+        CitizenState record = CitizenSavedData.get(level).find(citizen.citizenId()).orElse(null);
+        return state(level).visit(household,needs,record,HouseholdSavedData.get(level)::getHousehold,level.getGameTime());
     }
-
-    private List<Offer> validOffers(ServerLevel level, UUID householdId) {
-        ArrayList<Offer> valid = new ArrayList<>();
-        for (Offer offer : List.copyOf(offers)) {
-            if (offer.householdId.equals(householdId) || offer.askScore >= 0.0) continue;
-            HouseholdStorageBlockEntity seller = storage(level, offer.householdId);
-            if (seller != null && contains(seller.contents(offer.householdId), offer.offered)) valid.add(offer);
-        }
-        return List.copyOf(valid);
-    }
-
     public SettlementMarketPayload snapshot() {
-        List<SettlementMarketPayload.Offer> currentOffers = offers.stream()
-                .map(offer -> new SettlementMarketPayload.Offer(
-                        offer.householdId, offer.offered, offer.requested))
-                .toList();
-        List<SettlementMarketPayload.Trade> completedTrades = history.stream()
-                .map(trade -> new SettlementMarketPayload.Trade(trade.sellerId(), trade.buyerId(),
-                        trade.sellerItem(), trade.buyerItem(), trade.gameTime()))
-                .toList();
-        return new SettlementMarketPayload(worldPosition, currentOffers, completedTrades);
+        return level instanceof ServerLevel server ? state(server).snapshot()
+                : new SettlementMarketPayload(worldPosition,List.of(),List.of());
     }
-
-    private void publishOffer(ServerLevel level, UUID householdId, CitizenNeeds needs, List<ItemStack> goods) {
-        if (offers.stream().anyMatch(offer -> offer.householdId.equals(householdId))) return;
-        List<Item> tradeable = goods.stream().filter(stack -> !stack.isEmpty()).map(ItemStack::getItem).distinct().toList();
-        if (tradeable.isEmpty()) return;
-        Optional<BarterTradeChoice.Choice> choice = BarterTradeChoice.best(
-                tradeable, BuiltInRegistries.ITEM.stream().toList(), needs);
-        if (choice.isEmpty()) return;
-        ItemStack offered = goods.stream().filter(stack -> stack.getItem() == choice.get().traded())
-                .findFirst().orElse(ItemStack.EMPTY);
-        if (offered.isEmpty()) return;
-        double askScore = choice.get().score();
-        double askUtility = ItemNeedValues.forItem(offered.getItem()).utility(needs);
-        offers.add(new Offer(householdId, offered.copyWithCount(1), new ItemStack(choice.get().requested()), askScore, askUtility));
-        offers.sort(Comparator.comparingDouble((Offer offer) -> offer.askUtility)
-                .thenComparingDouble(offer -> offer.askScore)
-                .thenComparing(offer -> offer.householdId.toString()));
-        setChanged();
-    }
-
-    private HouseholdStorageBlockEntity storage(ServerLevel level, UUID householdId) {
-        HouseholdFarmSavedData farms = HouseholdFarmSavedData.get(level);
-        BlockPos position = farms.storagePosition(level, householdId).orElse(null);
-        if (position == null) return null;
-        if (!level.isLoaded(position)) level.getChunkAt(position);
-        return level.getBlockEntity(position) instanceof HouseholdStorageBlockEntity storage
-                && storage.belongsTo(householdId) ? storage : null;
-    }
-
-    private static boolean contains(List<ItemStack> stacks, ItemStack target) {
-        return stacks.stream().anyMatch(stack -> ItemStack.isSameItemSameComponents(stack, target));
-    }
-
-    @Override
-    protected void saveAdditional(ValueOutput output) {
+    @Override protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
-        output.putInt("OfferCount", offers.size());
-        for (int index = 0; index < offers.size(); index++) {
-            Offer offer = offers.get(index);
-            output.putString("OfferHousehold" + index, offer.householdId.toString());
-            output.store("OfferOffered" + index, ItemStack.OPTIONAL_CODEC, offer.offered);
-            output.store("OfferRequested" + index, ItemStack.OPTIONAL_CODEC, offer.requested);
-            output.putString("OfferAskScore" + index, Double.toString(offer.askScore));
-            output.putString("OfferAskUtility" + index, Double.toString(offer.askUtility));
-        }
-        output.putInt("TradeHistoryCount", history.size());
-        for (int index = 0; index < history.size(); index++) {
-            SettlementMarketTradeRecord trade = history.get(index);
-            output.putString("TradeSeller" + index, trade.sellerId().toString());
-            output.putString("TradeBuyer" + index, trade.buyerId().toString());
-            output.store("TradeSellerItem" + index, ItemStack.OPTIONAL_CODEC, trade.sellerItem());
-            output.store("TradeBuyerItem" + index, ItemStack.OPTIONAL_CODEC, trade.buyerItem());
-            output.putLong("TradeGameTime" + index, trade.gameTime());
-        }
+        output.putInt("BackendVersion",1);
+        if (legacy != null) output.store("LegacyBook",SettlementMarketState.CODEC,legacy);
     }
-
-    @Override
-    protected void loadAdditional(ValueInput input) {
+    @Override protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
-        offers.clear();
-        int count = Math.clamp(input.getInt("OfferCount").orElse(0), 0, 256);
-        for (int index = 0; index < count; index++) {
-            Optional<String> ownerValue = input.getString("OfferHousehold" + index);
-            Optional<ItemStack> offered = input.read("OfferOffered" + index, ItemStack.OPTIONAL_CODEC);
-            Optional<ItemStack> requested = input.read("OfferRequested" + index, ItemStack.OPTIONAL_CODEC);
-            if (ownerValue.isEmpty() || offered.isEmpty() || requested.isEmpty()
-                    || offered.get().isEmpty() || requested.get().isEmpty()) continue;
+        legacy = input.read("LegacyBook",SettlementMarketState.CODEC).orElse(null);
+        if (legacy != null || input.getInt("BackendVersion").orElse(0) >= 1) return;
+        legacy = new SettlementMarketState(new CitizenAssetKey("minecraft:overworld",worldPosition));
+        for (int i = 0; i < Math.clamp(input.getInt("OfferCount").orElse(0),0,256); i++) {
             try {
-                offers.add(new Offer(UUID.fromString(ownerValue.get()), offered.get(), requested.get(),
-                        parseDouble(input.getString("OfferAskScore" + index).orElse("0")),
-                        parseDouble(input.getString("OfferAskUtility" + index).orElse("0"))));
-            } catch (IllegalArgumentException ignored) {
-                // Ignore malformed offers without discarding the remaining market book.
-            }
+                UUID household = UUID.fromString(input.getString("OfferHousehold"+i).orElse(""));
+                ItemStack offered = input.read("OfferOffered"+i,ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
+                ItemStack requested = input.read("OfferRequested"+i,ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
+                legacy.offer(household,offered,requested,Double.parseDouble(input.getString("OfferAskScore"+i).orElse("0")),
+                        Double.parseDouble(input.getString("OfferAskUtility"+i).orElse("0")));
+            } catch (IllegalArgumentException ignored) { }
         }
-        history.clear();
-        int historyCount = Math.clamp(input.getInt("TradeHistoryCount").orElse(0), 0, 256);
-        for (int index = 0; index < historyCount; index++) {
-            Optional<String> sellerValue = input.getString("TradeSeller" + index);
-            Optional<String> buyerValue = input.getString("TradeBuyer" + index);
-            Optional<ItemStack> sellerItem = input.read("TradeSellerItem" + index, ItemStack.OPTIONAL_CODEC);
-            Optional<ItemStack> buyerItem = input.read("TradeBuyerItem" + index, ItemStack.OPTIONAL_CODEC);
-            if (sellerValue.isEmpty() || buyerValue.isEmpty() || sellerItem.isEmpty() || buyerItem.isEmpty()
-                    || sellerItem.get().isEmpty() || buyerItem.get().isEmpty()) continue;
+        for (int i = 0; i < Math.clamp(input.getInt("TradeHistoryCount").orElse(0),0,256); i++) {
             try {
-                history.add(new SettlementMarketTradeRecord(UUID.fromString(sellerValue.get()),
-                        UUID.fromString(buyerValue.get()), sellerItem.get(), buyerItem.get(),
-                        input.getLong("TradeGameTime" + index).orElse(0L)));
-            } catch (IllegalArgumentException ignored) {
-                // Ignore malformed records without discarding the remaining market history.
-            }
-        }
-    }
-
-    private static double parseDouble(String value) {
-        try {
-            double parsed = Double.parseDouble(value);
-            return Double.isFinite(parsed) ? parsed : 0.0;
-        } catch (NumberFormatException ignored) {
-            return 0.0;
-        }
-    }
-
-    private record Offer(UUID householdId, ItemStack offered, ItemStack requested, double askScore, double askUtility) {}
-
-    private record OfferChoice(Offer offer, ItemStack traded, double score, boolean remembered) implements Comparable<OfferChoice> {
-        @Override
-        public int compareTo(OfferChoice other) {
-            int byMemory = Boolean.compare(other.remembered, remembered);
-            if (byMemory != 0) return byMemory;
-            int byScore = Double.compare(score, other.score);
-            if (byScore != 0) return byScore;
-            int byAsk = Double.compare(offer.askUtility, other.offer.askUtility);
-            if (byAsk != 0) return byAsk;
-            return offer.householdId.toString().compareTo(other.offer.householdId.toString());
+                legacy.importTrade(UUID.fromString(input.getString("TradeSeller"+i).orElse("")),
+                        UUID.fromString(input.getString("TradeBuyer"+i).orElse("")),
+                        input.read("TradeSellerItem"+i,ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY),
+                        input.read("TradeBuyerItem"+i,ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY),input.getLong("TradeGameTime"+i).orElse(0L));
+            } catch (IllegalArgumentException ignored) { }
         }
     }
 }

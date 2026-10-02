@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.List;
 import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
@@ -73,7 +75,7 @@ class CitizenDecisionPlannerTest {
 
     @Test
     void onlyRememberedProductGetsOneTradeValueAndOtherOutputKeepsDirectUtility() {
-        CitizenNeeds needs = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 0, 0, 0);
         double oneTrade = CitizenDecisionPlanner.adjustedOutputUtility(
                 Items.WHEAT, 2, Items.BREAD, Items.WHEAT, needs);
         assertEquals(5.0, oneTrade, 0.0001);
@@ -81,7 +83,7 @@ class CitizenDecisionPlannerTest {
                 Items.WHEAT, 2, Items.BREAD, Items.BREAD, needs), 0.0001);
         assertEquals(4.0, CitizenDecisionPlanner.adjustedOutputUtility(
                 Items.WHEAT, 2, Items.BREAD, Items.WHEAT,
-                new CitizenNeeds(0, 100, 100, 0)), 0.0001);
+                CitizenNeed.defaults(0, 100, 100, 0)), 0.0001);
     }
 
     @Test
@@ -93,7 +95,7 @@ class CitizenDecisionPlannerTest {
 
     @Test
     void miningWeightsLootAndRejectsDropsTheResourceStockCannotPayFor() {
-        CitizenNeeds needs = new CitizenNeeds(100, 100, 100, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 100, 100, 0);
         assertEquals(3.0, CitizenDecisionPlanner.miningOutputUtility(
                 needs, null, null, 3, 1, 1, 1), 0.0001);
         assertEquals(0.6, CitizenDecisionPlanner.miningOutputUtility(

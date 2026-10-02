@@ -11,6 +11,9 @@ final class CitizenTeleportPoints {
     private CitizenTeleportPoints() {}
 
     static boolean isSafe(ServerLevel level, CitizenEntity citizen, BlockPos feet) {
+        // Prevent collision and block lookups from loading neighbouring chunks.
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+            if (!level.isPositionEntityTicking(feet.offset(dx,0,dz))) return false;
         BlockPos below = feet.below();
         if (!level.getBlockState(feet).isAir() || !level.getBlockState(feet.above()).isAir()
                 || !level.getFluidState(feet).isEmpty()

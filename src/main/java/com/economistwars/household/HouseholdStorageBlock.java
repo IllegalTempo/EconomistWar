@@ -8,6 +8,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -77,38 +79,54 @@ public final class HouseholdStorageBlock extends Block implements EntityBlock {
         if (!(level.getBlockEntity(position) instanceof HouseholdStorageBlockEntity storage)) {
             return InteractionResult.PASS;
         }
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return InteractionResult.PASS;
+        }
+        Household household = HouseholdSavedData.get(serverLevel).storageFor(storage);
+        if (household == null) {
+            return InteractionResult.PASS;
+        }
         player.openMenu(new SimpleMenuProvider(
                 (containerId, inventory, ignored) -> new ChestMenu(MenuType.GENERIC_9x1, containerId, inventory,
-                        new CreativeContainer(storage), 1),
+                        new CreativeContainer(household, storage), 1),
                 Component.literal("Household Storage")
         ));
         return InteractionResult.SUCCESS;
     }
 
     private static final class CreativeContainer implements net.minecraft.world.Container {
+        private final Household household;
         private final HouseholdStorageBlockEntity storage;
 
-        private CreativeContainer(HouseholdStorageBlockEntity storage) {
+        private CreativeContainer(Household household, HouseholdStorageBlockEntity storage) {
+            this.household = household;
             this.storage = storage;
         }
 
-        @Override public int getContainerSize() { return storage.getContainerSize(); }
-        @Override public boolean isEmpty() { return storage.isEmpty(); }
-        @Override public net.minecraft.world.item.ItemStack getItem(int slot) { return storage.getItem(slot); }
-        @Override public net.minecraft.world.item.ItemStack removeItem(int slot, int amount) {
-            return storage.removeItem(slot, amount);
+        @Override public int getContainerSize() { return household.storageSize(); }
+        @Override public boolean isEmpty() {
+            for (int slot = 0; slot < household.storageSize(); slot++) {
+                if (!household.getItem(slot).isEmpty()) return false;
+            }
+            return true;
         }
-        @Override public net.minecraft.world.item.ItemStack removeItemNoUpdate(int slot) {
-            return storage.removeItemNoUpdate(slot);
+        @Override public ItemStack getItem(int slot) { return household.getItem(slot); }
+        @Override public ItemStack removeItem(int slot, int amount) {
+            return household.removeItem(slot, amount);
         }
-        @Override public void setItem(int slot, net.minecraft.world.item.ItemStack stack) {
-            storage.setItem(slot, stack);
+        @Override public ItemStack removeItemNoUpdate(int slot) {
+            ItemStack removed = household.getItem(slot);
+            household.setItem(slot, ItemStack.EMPTY);
+            return removed;
+        }
+        @Override public void setItem(int slot, ItemStack stack) {
+            household.setItem(slot, stack);
         }
         @Override public boolean stillValid(Player player) { return storage.stillValid(player); }
-        @Override public boolean canPlaceItem(int slot, net.minecraft.world.item.ItemStack stack) {
-            return storage.canPlaceItem(slot, stack);
+        @Override public boolean canPlaceItem(int slot, ItemStack stack) {
+            return slot >= 0 && slot < household.storageSize();
         }
-        @Override public void setChanged() { storage.setChanged(); }
-        @Override public void clearContent() { storage.clearContent(); }
+        @Override public void setChanged() { household.markChanged(); }
+        @Override public void clearContent() { household.clearStorage(); }
     }
 }
