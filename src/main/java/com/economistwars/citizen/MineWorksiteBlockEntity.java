@@ -41,13 +41,17 @@ public final class MineWorksiteBlockEntity extends BlockEntity {
                 level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
             }
         }
-        if (!registered) {
-            MineSiteSavedData.get(level).register(level, worldPosition);
-            registered = true;
+        MineSiteState state = MineSiteSavedData.get(level).registerIfAbsent(
+                new CitizenAssetKey(level.dimension().identifier().toString(),worldPosition),resourceRemaining,triggerBounds);
+        if (resourceRemaining != state.remaining()) {
+            resourceRemaining = state.remaining();
+            level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),3);
         }
     }
 
     public int resourceRemaining() {
+        if (level instanceof ServerLevel server) return MineSiteSavedData.get(server)
+                .find(new CitizenAssetKey(server.dimension().identifier().toString(),worldPosition)).map(MineSiteState::remaining).orElse(resourceRemaining);
         return resourceRemaining;
     }
 
@@ -68,6 +72,13 @@ public final class MineWorksiteBlockEntity extends BlockEntity {
     }
 
     public boolean consume(int amount) {
+        if (level instanceof ServerLevel server) {
+            MineSiteState state = MineSiteSavedData.get(server).registerIfAbsent(
+                    new CitizenAssetKey(server.dimension().identifier().toString(),worldPosition),resourceRemaining,triggerBounds);
+            if (!state.consume(amount)) return false;
+            resourceRemaining = state.remaining(); setChanged();
+            level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),3); return true;
+        }
         if (amount <= 0 || amount > resourceRemaining) return false;
         resourceRemaining -= amount;
         setChanged();

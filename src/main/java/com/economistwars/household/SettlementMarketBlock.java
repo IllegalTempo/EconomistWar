@@ -38,6 +38,18 @@ public final class SettlementMarketBlock extends Block implements EntityBlock {
 
     public static void initialize() { EconomistWars.LOGGER.info("Registered settlement market anchor"); }
 
+    @Override protected void onPlace(BlockState state,Level level,BlockPos pos,BlockState old,boolean moved) {
+        super.onPlace(state,level,pos,old,moved);
+        if (!old.is(this) && level instanceof net.minecraft.server.level.ServerLevel server)
+            com.economistwars.citizen.SettlementMarketSavedData.get(server).placed(
+                    new com.economistwars.citizen.CitizenAssetKey(server.dimension().identifier().toString(),pos));
+    }
+    @Override protected void affectNeighborsAfterRemoval(BlockState state,net.minecraft.server.level.ServerLevel level,BlockPos pos,boolean moved) {
+        super.affectNeighborsAfterRemoval(state,level,pos,moved);
+        if (!level.getBlockState(pos).is(this)) com.economistwars.citizen.SettlementMarketSavedData.get(level).invalidate(
+                new com.economistwars.citizen.CitizenAssetKey(level.dimension().identifier().toString(),pos));
+    }
+
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos position,
                                                 Player player, BlockHitResult hit) {

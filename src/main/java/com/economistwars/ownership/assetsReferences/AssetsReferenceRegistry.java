@@ -3,7 +3,6 @@ package com.economistwars.ownership.assetsReferences;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Function;
 
 /** Register additional asset parsers during initialization, before loading saved ownerships. */
@@ -12,8 +11,8 @@ public final class AssetsReferenceRegistry {
             new HashMap<>();
 
     static {
-        register("item", payload -> new ItemAssetsReference(UUID.fromString(payload)));
-        register("land", payload -> new LandAssetsReference(LandAssetsReference.parseBoundingBox(payload)));
+        register("item", ItemAssetsReference::parsePayload);
+        register("land", LandAssetsReference::parsePayload);
     }
 
     private AssetsReferenceRegistry() {}
@@ -32,5 +31,9 @@ public final class AssetsReferenceRegistry {
     public static AssetsReference deserialize(String type, String payload) {
         Function<String, ? extends AssetsReference> parser = PARSERS.get(type);
         return parser == null ? null : parser.apply(payload);
+    }
+
+    public static AssetsReference deserialize(String type, String payload, com.mojang.serialization.DynamicOps<?> ops) {
+        return type.equals("item") ? ItemAssetsReference.parsePayload(payload, ops) : deserialize(type, payload);
     }
 }

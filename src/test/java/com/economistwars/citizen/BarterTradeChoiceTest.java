@@ -1,5 +1,7 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import java.util.List;
 import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,7 +18,7 @@ class BarterTradeChoiceTest {
 
     @Test
     void choosesTheCompatibleTradeWithTheLowestTradedMinusRequestedUtility() {
-        CitizenNeeds needs = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 0, 0, 0);
 
         var choice = BarterTradeChoice.best(
                 List.of(Items.BREAD, Items.STONE), List.of(Items.APPLE, Items.BREAD), needs);
@@ -29,7 +31,7 @@ class BarterTradeChoiceTest {
 
     @Test
     void rejectsTradesThatDoNotImproveTheBuyersUtility() {
-        CitizenNeeds needs = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(100, 0, 0, 0);
 
         assertTrue(BarterTradeChoice.best(
                 List.of(Items.BREAD), List.of(Items.APPLE), needs).isEmpty());
@@ -37,7 +39,7 @@ class BarterTradeChoiceTest {
 
     @Test
     void marketOpportunityRequiresAStoredRequestedItemAndPositiveNeedUtilityGain() {
-        CitizenNeeds hungry = new CitizenNeeds(100, 0, 0, 0);
+        Map<String, CitizenNeed> hungry = CitizenNeed.defaults(100, 0, 0, 0);
         var offers = List.of(new BarterTradeChoice.TradeOffer(Items.BREAD, Items.STONE));
 
         assertEquals(4.0, BarterTradeChoice.bestPotentialBenefit(
@@ -45,6 +47,6 @@ class BarterTradeChoiceTest {
         assertEquals(0.0, BarterTradeChoice.bestPotentialBenefit(
                 List.of(Items.APPLE), offers, hungry), 0.0001);
         assertEquals(0.0, BarterTradeChoice.bestPotentialBenefit(
-                List.of(Items.STONE), offers, new CitizenNeeds(0, 0, 0, 0)), 0.0001);
+                List.of(Items.STONE), offers, CitizenNeed.defaults(0, 0, 0, 0)), 0.0001);
     }
 }

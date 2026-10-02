@@ -14,7 +14,7 @@ public final class FarmPlotBlockEntity extends BlockEntity {
 
     public void serverTick(ServerLevel level) {
         if (!registered) {
-            LandSavedData.get(level).registerParcel(level, worldPosition);
+            com.economistwars.ownership.OwnershipSavedData.get(level).registerParcel(level, worldPosition);
             registered = true;
         }
     }

@@ -4,7 +4,7 @@ import com.economistwars.EconomistWars;
 import com.economistwars.citizen.CitizenEntity;
 import com.economistwars.citizen.CitizenEntityType;
 import com.economistwars.household.HouseholdSavedData;
-import com.economistwars.household.LandSavedData;
+import com.economistwars.ownership.OwnershipSavedData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ public final class CitizenCommands {
 
     private static int inspectLand(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        LandSavedData.get(player.level()).parcelAt(player.level(), player.blockPosition())
+        OwnershipSavedData.get(player.level()).parcelAt(player.level().dimension(), player.blockPosition())
                 .ifPresentOrElse(parcel -> source.sendSuccess(() -> parcel.owner() == null
                         ? Component.translatable("commands.economistwars.land.unowned")
                         : Component.translatable("commands.economistwars.land.owned", parcel.owner().toString()), false),
@@ -62,16 +62,21 @@ public final class CitizenCommands {
                 }
                 citizen.setPos(origin.getX() + (index % 4) - 1.5, origin.getY(), origin.getZ() + (index / 4) - 1.5);
                 created.add(citizen);
+                citizen.createBackendRecord();
                 if (!level.addFreshEntity(citizen)) {
                     throw new IllegalStateException("Minecraft rejected a citizen entity spawn");
                 }
             }
+            data.registerHome(level, householdId, origin);
         } catch (RuntimeException exception) {
             for (CitizenEntity citizen : created) {
                 citizen.discard();
+                com.economistwars.citizen.CitizenSavedData.get(level).find(citizen.citizenId())
+                        .ifPresent(com.economistwars.citizen.CitizenSavedData.get(level)::rollbackCreation);
                 data.removeCitizen(citizen.citizenId());
             }
             data.removeHousehold(householdId);
+            OwnershipSavedData.get(level).releaseHousehold(householdId);
             EconomistWars.LOGGER.error("Failed to create household {}; rolled back {} citizens", householdId, created.size(), exception);
             source.sendFailure(Component.translatable("commands.economistwars.household.failed"));
             return 0;

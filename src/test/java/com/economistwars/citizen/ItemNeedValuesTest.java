@@ -1,12 +1,31 @@
 package com.economistwars.citizen;
 
+import java.util.Map;
+
 import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ItemNeedValuesTest {
+    @Test
+    void customNeedsParticipateInUtilityUrgencyAndSatisfaction() {
+        var needs = CitizenNeed.defaults(0, 0, 0, 0);
+        CitizenNeed thirst = new CitizenNeed("thirst", 80, 20, 2.0F, 0);
+        needs.put(thirst.name(), thirst);
+        ItemNeedValues water = new ItemNeedValues(java.util.Map.of("thirst", 40));
+
+        assertEquals(32.0, water.utility(needs), 0.0001);
+        assertTrue(water.satisfiesUrgentNeed(needs));
+        water.satisfy(needs);
+        assertEquals(40, thirst.urgency());
+        assertFalse(water.satisfiesUrgentNeed(needs));
+        assertEquals(0, CitizenNeed.urgency(needs, CitizenNeed.EAT));
+    }
+
     @BeforeAll
     static void bootstrapMinecraftRegistries() {
         MinecraftTestBootstrap.ensureBootstrapped();
@@ -25,7 +44,7 @@ class ItemNeedValuesTest {
 
     @Test
     void utilityUsesNeedUrgencyAsAPercentage() {
-        CitizenNeeds needs = new CitizenNeeds(50, 25, 100, 0);
+        Map<String, CitizenNeed> needs = CitizenNeed.defaults(50, 25, 100, 0);
 
         assertEquals(2.5, ItemNeedValues.forItem(Items.BREAD).utility(needs), 0.0001);
     }
