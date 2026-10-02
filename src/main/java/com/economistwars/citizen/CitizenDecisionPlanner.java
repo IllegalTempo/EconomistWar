@@ -51,14 +51,14 @@ final class CitizenDecisionPlanner {
         return expected;
     }
 
-    static double adjustedOutputUtility(net.minecraft.world.item.Item product, int quantity,
-            net.minecraft.world.item.Item rememberedReceived, net.minecraft.world.item.Item rememberedRequested,
+    static double adjustedOutputUtility(Item product, int quantity,
+            Item rememberedReceived, Item rememberedRequested,
             CitizenNeeds needs) {
         if (quantity <= 0) return 0.0;
         double direct = ItemNeedValues.forItem(product).utility(needs);
         if (product == rememberedRequested && rememberedReceived != null) {
             double gain = ItemNeedValues.forItem(rememberedReceived).utility(needs) - direct;
-            return (gain > 0.0 ? gain : direct) + (quantity - 1) * direct;
+            return (gain > 0.0 ? gain : direct * quantity) ;
         }
         return quantity * direct;
     }
